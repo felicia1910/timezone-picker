@@ -1,0 +1,329 @@
+﻿<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <link rel="stylesheet" href="https://pro.fontawesome.com/releases/v5.10.0/css/all.css">
+    <link rel="stylesheet" href="./element-plus.css" />
+    <!-- timezone -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.11.1/dayjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.11.1/plugin/utc.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.11.1/plugin/timezone.min.js"></script>
+    <script src="./timezone.js"></script>
+
+    <title>Upload</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 微軟正黑體;
+        }
+
+        body {
+            overflow-x: hidden;
+            width: 100%;
+        }
+
+        #activityitemapp {
+            margin: auto;
+            padding: 10px 20px;
+            color: rgb(77, 77, 77);
+        }
+
+        .grid-one {
+            display: grid;
+            grid-template-columns: 1fr;
+            margin-bottom: 10px;
+        }
+
+        .grid-two {
+            display: grid;
+            grid-template-columns: 130px 1fr;
+            margin-bottom: 20px;
+            grid-column-gap: 10px;
+        }
+
+        .el-input {
+            width: 100% !important;
+        }
+        .m-10{
+            margin-bottom: 10;
+            font-weight: bold;
+        }
+        /*table*/
+        .table {
+            overflow-x: scroll;
+        }
+        .g-5 {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+        }
+        .table-head-box{
+            background-color: rgb(91, 91, 91);
+            color: #fff;
+        }
+
+        .bc-e{
+            background-color: #eee;
+        }
+
+        .th,
+        .tb {
+            border: solid 1px #eee;
+            padding: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="activityitemapp">
+        <!-- 第一排 -->
+        <div class="m-10">Choose Main TimeZone:</div>
+        <div class="grid-two">
+            <el-select v-model="choseDrop.val" placeholder="Select" @change="choseDropFun">
+                <el-option v-for="(item,key) in choseDrop.arr" :key="key" :label="item.text" :value="item.value" />
+            </el-select>
+            <el-select v-model="choseTimeZoneList.val" filterable placeholder="Select The Main Time Zone">
+                <el-option v-for="(item,key) in choseTimeZoneList.arr" :key="key" :label="item.text"
+                    :value="item.value" />
+            </el-select>
+        </div>
+        <!-- 第二排  -->
+        <div class="grid-one">
+            <el-date-picker v-model="timeVal" placeholder="Select date and time" type="datetime"
+                format="YYYY-MM-DD hh:mm A" @change="getTime" @blur="getTime" :disabled="choseTimeZoneList.val==null" />
+        </div>
+        <!-- 第三排  -->
+        <div class="m-10">Choose View TimeZone:</div>
+        <div class="grid-two">
+            <el-select v-model="choseView.val" placeholder="Select" @change="choseViewFun">
+                <el-option v-for="(item,key) in choseView.arr" :key="key" :label="item.text" :value="item.value" />
+            </el-select>
+            <el-select v-model="choseTimeZoneViewList.val" multiple filterable allow-create default-first-option
+                :reserve-keyword="false" placeholder="Choose somewhere to turn the time" @change="choseViewTimeZoneFun">
+                <el-option v-for="(item,k) in choseTimeZoneViewList.arr" :key="k" :label="item.text"
+                    :value="item.value" />
+            </el-select>
+        </div>
+        <!-- 第四排  -->
+        <div class="table">
+            <div class="table-head-box g-5">
+                <div class="th" v-for="(v,k) in tableHead.arr" :key="k">{{v.name}}</div>
+            </div>
+            <div class="table-body-box">
+                <div :class="['g-5']" v-for="(v,k) in choseTimeZoneViewList.arr" :key="k" v-show="v.click">
+                    <!-- area在abbr時不要顯示 -->
+                    <div class="tb">{{choseView.val==2?v.utc:''}}</div>
+                    <div class="tb">{{v.abbr}}</div>
+                    <div class="tb">{{v.date}}</div>
+                    <div class="tb">{{v.clock}}</div>
+                    <div class="tb">{{v.day}}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- vue3.0 -->
+    <script src="./vue3.js"></script>
+    <script src="./element-plus.js"></script>
+    <script>
+        dayjs.extend(window.dayjs_plugin_utc);
+        dayjs.extend(window.dayjs_plugin_timezone);
+        const { ref, reactive, readonly, computed, watch, onMounted, onBeforeMount } = Vue;//掛鉤用（可接受所以類別），但物件或陣列內部無法監聽
+        const { createComponent } = Vue
+
+        //基本全域，先定義最外層
+        const App = Vue.createApp({
+            //setup是vue3.0改動最大的部分，return是必要的
+            setup() {
+                //引入timeZoneMap
+                const nowWhere = ref(dayjs.tz.guess());//自動對應你當前時區
+                const choseDrop = reactive({
+                    val: 3, arr: [
+                        { text: 'Area', value: 2 },
+                        { text: 'Abbr', value: 3 }
+                    ]
+                });//選擇要選擇的類別
+                const choseTimeZoneList = reactive({ val: null, arr: [] });
+                const AreaList = reactive({ arr: [] });//地區
+                const AbbrList = reactive({ arr: [] });//時區簡稱
+                const choseView = reactive({
+                    val: 3, arr: [
+                        { text: 'Area', value: 2 },
+                        { text: 'Abbr', value: 3 }
+                    ]
+                });//選擇要顯示的類別
+                const choseTimeZoneViewList = reactive({ val: {}, arr: [] });
+                const tableHead = reactive({ arr: [{ name: 'Area' }, { name: 'Time Zone' }, { name: 'Date' }, { name: 'Time' }, { name: 'Day' }] });
+                const tableData = reactive({ arr: [] });
+                const ShowAreaList = reactive({ arr: [], val: {} });
+                const ShowAbbrList = reactive({ arr: [], val: {} });
+                const timeVal = ref('');
+
+                //+++++++++++++++++++++++++++++++++++++++++++
+                //               FUNCTION
+                //+++++++++++++++++++++++++++++++++++++++++++
+                const start = () => {
+                    let areas = [];
+                    let times = {
+                        time: '',
+                        date: '',
+                        clock: '',
+                        day: '',
+                        click: false
+                    }
+                    //時區整理
+                    timeZoneMap.forEach((item, key) => {
+                        //-----------------
+                        //時區
+                        //-----------------
+                        if (item.utc[0]) {
+                            let obj1 = {
+                                value: key,
+                                text: `${item.abbr}/ ${item.text}`,//時區名字
+                                abbr: `${item.abbr}/ ${item.text}`,
+                                utc: item.utc[0] ? item.utc[0] : ''//地區
+                            };
+                            let obj2 = {
+                                ...obj1,
+                                ...times
+                            }
+                            AbbrList.arr.push(obj1);//時區
+                            ShowAbbrList.arr.push(obj2);//顯示時區
+                        }
+                        //-----------------
+                        //地區
+                        //----------------
+                        let utcs = item.utc.map(utc => {
+                            return {
+                                text: utc,
+                                abbr: `${item.abbr}/ ${item.text}`
+                            }
+                        });
+                        areas = areas.concat(utcs);
+
+                    });
+
+                    //地區整理
+                    let newAreas=filterMany(areas, 'text');//整理重複
+                    console.log('newAreas',newAreas)
+                    newAreas.forEach((item, key) => {
+                        let obj1 = {
+                            value: key,
+                            text: item.text,//地區
+                            utc: item.text,
+                            abbr: item.abbr
+                        };
+                        let obj2 = {
+                            ...obj1,
+                            ...times
+                        }
+                        AreaList.arr.push(obj1);
+                        ShowAreaList.arr.push(obj2);//顯示地區
+                    });
+
+                    choseTimeZoneList.arr = AbbrList.arr;
+                    choseTimeZoneViewList.arr = ShowAbbrList.arr;
+                };
+
+                const filterMany = (arr, field) => {
+                    let set = new Set();
+                    let result = arr.filter(item => !set.has(item[field]) ? set.add(item[field]) : false);
+                    let newRes = [...result];
+                    return newRes
+                }
+
+                //選時間
+                const getTime = () => {
+                    console.log('get',timeVal.value)
+                    let obj = choseTimeZoneList.arr[choseTimeZoneList.val];
+                    let getTimeZone = choseDrop.val == 2 ? obj.text : obj.utc;
+                    let changeTime = cutTime(dayjs(new Date(timeVal.value)).format());
+                    for (let i = 0; i < choseTimeZoneViewList.arr.length; i++) {
+                        choseTimeZoneViewList.arr[i].time = cutTime(dayjs.tz(changeTime, getTimeZone).tz(choseTimeZoneViewList.arr[i].utc).format());
+                        let gT = choseTimeZoneViewList.arr[i].time;
+                        choseTimeZoneViewList.arr[i].date = dayjs(gT).format('YYYY-MM-DD');
+                        choseTimeZoneViewList.arr[i].clock = dayjs(gT).format('hh:mmA');
+                        choseTimeZoneViewList.arr[i].day = dayjs(gT).format('ddd');
+                        
+                    }
+                };
+
+                const cutTime = (val) => {
+                    return val.substring(0, 19);
+                };
+
+                //選擇要怎麼選主時區
+                const choseDropFun = () => {
+                    let val = choseDrop.val;
+                    choseTimeZoneList.val = null;
+                    choseTimeZoneList.arr = (val == 2) ? AreaList.arr : AbbrList.arr;
+                };
+
+                //選擇要怎麼選顯示
+                const choseViewFun = () => {
+                    let val = choseView.val;
+                    choseTimeZoneViewList.val = null;
+                    choseTimeZoneViewList.arr = (val == 2) ? ShowAreaList.arr : ShowAbbrList.arr;
+                    choseViewTimeZoneFun('spec');
+                    if (timeVal.value)
+                        getTime();
+                };
+
+                //選擇
+                const choseViewTimeZoneFun = (spec) => {
+
+                    let val = choseView.val;
+                    //原本的陣列存取本來存了什麼
+                    if (!spec) {
+                        if (val == 2) {
+                            ShowAreaList.val = choseTimeZoneViewList.val;
+                        } else if (val == 3) {
+                            ShowAbbrList.val = choseTimeZoneViewList.val;
+                        };
+                    };
+                    //轉陣列
+                    let getVal = choseTimeZoneViewList.val ? Object.keys(choseTimeZoneViewList.val).map(key => {
+                        return choseTimeZoneViewList.val[key]
+                    }) : [];
+                    choseTimeZoneViewList.arr = choseTimeZoneViewList.arr.map((e, k) => {
+                        let keyOk = getVal.some(s => s == e.value);
+                        return {
+                            ...e,
+                            click: keyOk
+                        }
+                    });
+
+                };
+
+                //++++++++++++++++++++++++++++
+                //一開始跑的
+                //++++++++++++++++++++++++++++
+                onMounted(async () => {
+                    start()
+                });
+
+
+                //需要再畫面顯示的資料要在這裡回傳
+                return {
+                    timeVal, choseDrop, choseTimeZoneList,
+                    choseView, choseTimeZoneViewList, tableHead, tableData, nowWhere,
+                    //fun
+                    getTime,
+                    choseDropFun, choseViewFun, choseViewTimeZoneFun
+
+                }
+            }
+        });
+
+        App.use(ElementPlus);
+        App.mount('#activityitemapp')//mount在app中，只有在app中的標籤才可被操作
+
+
+    </script>
+</body>
+
+</html>
